@@ -1,0 +1,24 @@
+{
+  "name": "hospital_api",
+  "version": "1.0.0",
+  "description": "Api para un hospital",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JohnPV894/hospital_API.git"
+  },
+  "author": "John Arenales Fernandez",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JohnPV894/hospital_API/issues"
+  },
+  "homepage": "https://github.com/JohnPV894/hospital_API#readme",
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongodb": "^6.16.0",
+    "nodemon": "^3.1.10"
+  }
+}
