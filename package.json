@@ -17,8 +17,12 @@
   },
   "homepage": "https://github.com/JohnPV894/hospital_API#readme",
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "mongodb": "^6.16.0",
     "nodemon": "^3.1.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.18"
   }
 }
