@@ -25,33 +25,54 @@ app.listen(puerto, ()=>{
 })
 app.get("/",(req, res ) =>{
       res.json("Bienvenido a la peticion Raiz")
+})
 
-})
-app.get("/citas", async function (req, res ){
-      res.json(await verCitas())
-})
-app.get("/especialistas", async function (req, res ){
-      res.json(await verEspecialistas())
-})
+//Opciones administrativo
 app.get("/pacientes", async function (req, res ){
-      res.json(await verPacientes())
+      res.json(await verColeccion("pacientes"))
 })
-//Sesiones
-app.post("/sesiones/validar",async (req, res ) =>{
-      console.log("validar");
-      
-      res.json(await validarLogin(req.body));
+app.post("/pacientes/crear", async function (req, res ){
+      res.json(await crearPaciente(req.body))
 })
-//Administrativos opciones
+app.delete("/pacientes/eliminar",async (req,res)=>{
+      res.json(await eliminar_de_coleccion(req.body,"pacientes"))
+})
+app.post("/pacientes/informacionPaciente", async function (req, res ){
+      res.json(await verHistorialPaciente(req.body))
+})
+
+app.get("/citas", async function (req, res ){
+      res.json(await verColeccion("citas"))
+})
+app.post("/citas/crear", async function (req, res ){
+      res.json(await crearCita(req.body))
+})
+app.delete("/citas/eliminar", async function (req,res) {
+      res.json(await eliminar_de_coleccion(req.body,"citas"))
+})
+
+//Administrador opciones
+app.get("/especialistas", async function (req, res ){
+      res.json(await verColeccion("especialistas"))
+})
 app.post("/especialistas/crear", async  (req, res )=>{
       res.json(await creaEspecialista(req.body))
 })
 app.delete("/especialistas/eliminar", async  (req, res )=>{
-      res.json(await eliminarEspecialista(req.body))
+      res.json(await eliminar_de_coleccion(req.body,"especialista"))
+})
+
+//Sesiones
+app.post("/sesiones/crear",async (req,res )=> {
+      res.json(await crearSesion(req.body))
+})
+app.post("/sesiones/validar",async (req, res ) =>{
+      console.log("validar");
+      res.json(await validarLogin(req.body));
 })
 
 /* FUNCIONES */
-//[administradores]
+//[especialista]
 //Crear Especialidadez
 //@params "nombre" "rama" "dni" "telefono"
 async function creaEspecialista(objetoDatos) {
@@ -74,27 +95,10 @@ async function creaEspecialista(objetoDatos) {
       }
       return objetoRespuesta;
 }
-//Eliminar Especialista
-//@params ObjetoId(6845....)
-async function eliminarEspecialista(ObjetoId) {
-
-      await mongo_cliente.connect();
-      let objetoRespuesta = {"operacionEstado":null,"mensaje":null}
-      let documentoEspecialistas = mongo_cliente.db("hospital").collection("especialistas");
-      let eliminado =documentoEspecialistas.deleteOne({
-            "_id":ObjetoId
-      });
-      if ((await eliminado).acknowledged) {
-            objetoRespuesta = {"operacionEstado":true,"mensaje":"Encontrado y eliminado"}
-      }else{
-            objetoRespuesta = {"operacionEstado":false,"mensaje":"No se pudo encontrar"}
-      }
-      return objetoRespuesta;
-}
 //[sesiones]
 //Validar Credenciales de login
 async function crearSesion(objetoCredenciales) {
-            await mongo_cliente.connect();
+      await mongo_cliente.connect();
       let objetoRespuesta={"id":null,"operacion":null}
       let documentoSesiones = mongo_cliente.db("hospital").collection("sesiones");
       if (objetoCredenciales.usuario.trim() === "" ||
@@ -112,6 +116,7 @@ async function crearSesion(objetoCredenciales) {
             (await creacion).acknowledged?objetoRespuesta={"id": creacion.insertedId,"operacion":true,"mensaje":"creado"}:
             objetoRespuesta={"id": false,"operacion":true,"mensaje":"no creado"};
       }
+      return 
 }
 async function validarLogin(objetoCredenciales){
       console.log(objetoCredenciales);
@@ -157,6 +162,23 @@ async function crearPaciente(datosPaciente) {
       }
       return objetoRespuesta;
 }
+//[citas]
+//crear cita y asignarla
+//@params "id_paciente:objetoID(123)" "fecha" "asistio" "id_especialista:objetoID(123)"
+async function crearCita(datosCita) {
+      await mongo_cliente.connect();
+      let objetoRespuesta = {id:null,estadoOperacion:null,mensaje:null};
+      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
+      if(datosCita.pacienteID !== null && datosCita.fecha.trim() != null &&  typeof datosCita.asistio === "boolean" && datosCita.especialistaID != null){
+            let resultadoCreacionCita = await documentoCitas.insertOne(datosCita)
+            resultadoCreacionCita.acknowledged?
+            objetoRespuesta = {id:resultadoCreacionCita.insertedId,estadoOperacion:true,mensaje:"Cita asignada correctamente"}:
+            objetoRespuesta = {id:false,estadoOperacion:true,mensaje:"Fallo al crear cita"};
+      }else{
+            objetoRespuesta = {id:false,estadoOperacion:false,mensaje:"Faltan datos/Datos invalidos"};
+      }
+      return objetoRespuesta;
+}
 //Ver historial de un paciente
 //@params "id paciente"
 async function verHistorialPaciente(idPaciente) {
@@ -170,22 +192,30 @@ async function verHistorialPaciente(idPaciente) {
       return {"datosPaciente":paciente,"citasPaciente":citasDelPaciente};
 }
 //Ver Colecciones
-async function verCitas() {
+async function verColeccion(coleccionNombre) {
       await mongo_cliente.connect();
-      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
-      let todasLasCitas = await documentoCitas.find().toArray();
-      return todasLasCitas;
+      let documentoCitas = mongo_cliente.db("hospital").collection(coleccionNombre);
+      let coleccion = await documentoCitas.find().toArray();
+      return coleccion;
 }
-async function verEspecialistas() {
+//Eliminar Objeto de la coleccion
+async function eliminar_de_coleccion(ObjetoId,coleccion) {
+
       await mongo_cliente.connect();
-      let documentoPacientes = mongo_cliente.db("hospital").collection("especialistas");
-      let listaEspecialistas = await documentoPacientes.find().toArray();
-      return listaEspecialistas;
+      let objetoRespuesta = {"operacionEstado":null,"mensaje":null}
+      if (typeof ObjetoId === "string") {
+            ObjetoId = new ObjectId(ObjetoId);
+      } 
+      let documentoEspecialistas = mongo_cliente.db("hospital").collection(coleccion);
+      let eliminado = documentoEspecialistas.deleteOne({
+            "_id":ObjetoId
+      });
+      if ((await eliminado).acknowledged && (await eliminado).deletedCount) {
+            objetoRespuesta = {"operacionEstado":true,"mensaje":"Encontrado y eliminado"}
+      }else{
+            objetoRespuesta = {"operacionEstado":false,"mensaje":"No se pudo encontrar"}
+      }
+      return objetoRespuesta;
 }
-async function verPacientes() {
-      await mongo_cliente.connect();
-      let documentoPacientes = mongo_cliente.db("hospital").collection("pacientes");
-      let listaPacientes = await documentoPacientes.find().toArray();
-      return listaPacientes;
-}
+
 module.exports = app;
