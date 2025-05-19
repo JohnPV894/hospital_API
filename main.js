@@ -169,8 +169,20 @@ async function crearCita(datosCita) {
       await mongo_cliente.connect();
       let objetoRespuesta = {id:null,estadoOperacion:null,mensaje:null};
       let documentoCitas = mongo_cliente.db("hospital").collection("citas");
-      if(datosCita.pacienteID !== null && datosCita.fecha.trim() != null &&  typeof datosCita.asistio === "boolean" && datosCita.especialistaID != null){
-            let resultadoCreacionCita = await documentoCitas.insertOne(datosCita)
+      //Validaciones de datos
+      let sonStringValidos = typeof datosCita.pacienteID === "string" && typeof datosCita.especialistaID === "string" && typeof datosCita.fecha === "string" &&
+                              datosCita.pacienteID.trim()!=="" && datosCita.pacienteID.trim()!=="" && datosCita.fecha.trim()!== "" ;
+      let ID_validos = ObjectId.isValid(datosCita.pacienteID) &&  ObjectId.isValid(datosCita.especialistaID);
+
+      if (sonStringValidos && ID_validos) {
+            const documentoFormateado = {
+                pacienteID: new ObjectId(datosCita.pacienteID),
+                especialistaID: new ObjectId(datosCita.especialistaID),
+                fecha: new Date(datosCita.fecha),
+                asistio: datosCita.asistio
+            };
+
+            let resultadoCreacionCita = await documentoCitas.insertOne(documentoFormateado);
             resultadoCreacionCita.acknowledged?
             objetoRespuesta = {id:resultadoCreacionCita.insertedId,estadoOperacion:true,mensaje:"Cita asignada correctamente"}:
             objetoRespuesta = {id:false,estadoOperacion:true,mensaje:"Fallo al crear cita"};
@@ -179,6 +191,28 @@ async function crearCita(datosCita) {
       }
       return objetoRespuesta;
 }
+//Filtrar rango de fechas
+//@params fechainicial, fechaFinal, filtroAsistencia
+async function filtrarRangosFechas(objetoFiltro) {
+      await mongo_cliente.connect();
+      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
+      let consulta;
+      let fechaInicio = new Date (objetoFiltro.fechaInicio);
+      let fechaFinal = new Date (objetoFiltro.fechaFinal);
+      if (objetoFiltro.filtroAsistencia!==null) {//$gte (mayor o igual) $lte (menor o igual)
+            consulta = documentoCitas.find({
+                  asistio:objetoFiltro.filtroAsistencia,
+                  fecha:{$gte: fechaInicio,$lte: fechaFinal}
+            });      
+      }else {
+            consulta = documentoCitas.find({
+                  fecha: {$gte: fechaInicio,$lte: fechaFinal}
+            });
+      }
+      console.table(await consulta.toArray());
+
+}
+
 //Ver historial de un paciente
 //@params "id paciente"
 async function verHistorialPaciente(idPaciente) {
@@ -218,4 +252,30 @@ async function eliminar_de_coleccion(ObjetoId,coleccion) {
       return objetoRespuesta;
 }
 
+function fechaValida(fecha) {
+  return fecha instanceof Date && isNaN(fecha)===false;
+}
+//@params Fecha inicial, Fecha Final, FiltroAsistieron
+async function filtrarRangosFechas(objetoFiltro) {
+      let otroDia =new Date (2025,4,8);
+      let hoy = new Date()
+      console.log(hoy> otroDia);
+
+      
+}
+filtrarRangosFechas();
+
+//✅ 1. Cómo comprobar si una variable es de tipo fecha (Date)
+const fecha = new Date();
+console.log(fecha instanceof Date); // true
+
+//✅ 2. Cuando creas una fecha con un valor incorrecto (por ejemplo, "2025-02-30"), JavaScript crea un objeto Date, pero su valor será inválido (Invalid Date):
+const fechaInvalida = new Date("2025-02-30");
+
+console.log(isNaN(fechaInvalida)); // true → ¡no es válida!
+console.log(fechaInvalida.toString()); // "Invalid Date"
+
+function esFechaValida(fecha) {
+  return fecha instanceof Date && !isNaN(fecha);
+}
 module.exports = app;
