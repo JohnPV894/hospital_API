@@ -155,7 +155,7 @@ async function crearPaciente(datosPaciente) {
       ){
             let resultadoCreacionPaciente = await documentoPacientes.insertOne(datosPaciente)
             objetoRespuesta = {"operacionEstado":resultadoCreacionPaciente.acknowledged,"id":false};
-            objetoRespuesta.operacionEstado?objetoRespuesta.id=resultadoCreacionEspecialista.insertedId:objetoRespuesta.id=false;
+            objetoRespuesta.operacionEstado?objetoRespuesta.id=resultadoCreacionPaciente.insertedId:objetoRespuesta.id=false;
 
       }else{
             objetoRespuesta = {"operacionEstado":false,"id":false};     
