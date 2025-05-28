@@ -3,6 +3,7 @@
 const {MongoClient,ObjectId} = require('mongodb');
 const cors = require('cors');
 const express = require('express');
+const { log } = require('console');
 
 const puerto = 5000;
 const app = express();
@@ -35,7 +36,7 @@ app.post("/pacientes/crear", async function (req, res ){
       res.json(await crearPaciente(req.body))
 })
 app.delete("/pacientes/eliminar",async (req,res)=>{
-      res.json(await eliminar_de_coleccion(req.body,"pacientes"))
+      res.json(await eliminar_de_coleccion(req.body.id,"pacientes"))
 })
 app.post("/pacientes/informacionPaciente", async function (req, res ){
       res.json(await verHistorialPaciente(req.body))
@@ -48,7 +49,7 @@ app.post("/citas/crear", async function (req, res ){
       res.json(await crearCita(req.body))
 })
 app.delete("/citas/eliminar", async function (req,res) {
-      res.json(await eliminar_de_coleccion(req.body,"citas"))
+      res.json(await eliminar_de_coleccion(req.body.id,"citas"))
 })
 
 //Administrador opciones
@@ -56,10 +57,15 @@ app.get("/especialistas", async function (req, res ){
       res.json(await verColeccion("especialistas"))
 })
 app.post("/especialistas/crear", async  (req, res )=>{
+      console.log(req.body);
+      
       res.json(await creaEspecialista(req.body))
 })
 app.delete("/especialistas/eliminar", async  (req, res )=>{
-      res.json(await eliminar_de_coleccion(req.body,"especialista"))
+      //La funcion solo acepta string o objectId si le paso el json completo no funciona
+      res.json(await eliminar_de_coleccion(req.body.id,"especialistas"))
+
+
 })
 
 //Sesiones
@@ -74,7 +80,7 @@ app.post("/sesiones/validar",async (req, res ) =>{
 /* FUNCIONES */
 //[especialista]
 //Crear Especialidadez
-//@params "nombre" "rama" "dni" "telefono"
+//@params "nombre" "rama" "dni" "fechaNacimiento"
 async function creaEspecialista(objetoDatos) {
       
       await mongo_cliente.connect();
@@ -83,7 +89,8 @@ async function creaEspecialista(objetoDatos) {
       if(   objetoDatos.nombre.trim() != "" &&
             objetoDatos.rama.trim() != "" && 
             objetoDatos.dni.trim() != "" &&
-            objetoDatos.telefono.trim() != "" 
+            objetoDatos.rama.trim() != "",
+            objetoDatos.fechaNacimiento != null 
       )
       {
             let resultadoCreacionEspecialista = await documentoEspecialistas.insertOne(objetoDatos)
