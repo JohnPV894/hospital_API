@@ -51,21 +51,20 @@ app.post("/citas/crear", async function (req, res ){
 app.delete("/citas/eliminar", async function (req,res) {
       res.json(await eliminar_de_coleccion(req.body.id,"citas"))
 })
+app.post("/citas/filtrar/rango", async function(req,res) {
+      res.json(await filtrarRangosFechas(req.body))
+})
 
 //Administrador opciones
 app.get("/especialistas", async function (req, res ){
       res.json(await verColeccion("especialistas"))
 })
 app.post("/especialistas/crear", async  (req, res )=>{
-      console.log(req.body);
-      
       res.json(await creaEspecialista(req.body))
 })
 app.delete("/especialistas/eliminar", async  (req, res )=>{
       //La funcion solo acepta string o objectId si le paso el json completo no funciona
       res.json(await eliminar_de_coleccion(req.body.id,"especialistas"))
-
-
 })
 
 //Sesiones
@@ -201,23 +200,70 @@ async function crearCita(datosCita) {
 //Filtrar rango de fechas
 //@params fechainicial, fechaFinal, filtroAsistencia
 async function filtrarRangosFechas(objetoFiltro) {
+      console.log(objetoFiltro);
+      
       await mongo_cliente.connect();
       let documentoCitas = mongo_cliente.db("hospital").collection("citas");
-      let consulta;
+
       let fechaInicio = new Date (objetoFiltro.fechaInicio);
       let fechaFinal = new Date (objetoFiltro.fechaFinal);
-      if (objetoFiltro.filtroAsistencia!==null) {//$gte (mayor o igual) $lte (menor o igual)
-            consulta = documentoCitas.find({
+      let consulta;
+      fechaFinal.setDate(fechaFinal.getDate() + 1);
+
+      if (objetoFiltro.filtroAsistencia !== null) {//$gte (mayor o igual) $lte (menor o igual)
+            consulta = await documentoCitas.find({
                   asistio:objetoFiltro.filtroAsistencia,
                   fecha:{$gte: fechaInicio,$lte: fechaFinal}
-            });      
+            }).toArray();      
       }else {
-            consulta = documentoCitas.find({
+            consulta =await documentoCitas.find({
                   fecha: {$gte: fechaInicio,$lte: fechaFinal}
-            });
+            }).toArray();
       }
-      console.table(await consulta.toArray());
+      if (consulta!==null) {
+            return {mensaje:"Peticion aceptada por el servidor", respuesta: consulta}
+      }else{
+            return {mensaje:"Peticion rechazada por el servidor", respuesta: consulta}
+      }
+}
+//Filtrar Por Fecha (Mostrar todas las citas de un dia/semana/mes)
+//@params filtroForm, fecha,
+async function filtrarFecha(objetoFiltro) {
+      await mongo_cliente.connect();
+      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
+      let objetoRespuesta={ mensaje :null, resultado :null};
+      let filtro;
 
+      if( fechaValida(objetoFiltro.fecha) === false){
+            return { mensaje:"Operacion Cancelada, Fecha invalida", resultado:null};
+      }
+
+      if (objetoFiltro.filtroForm === "dia") {
+            let diaFin = new Date(objetoFiltro.fecha);
+            diaFin.setDate(diaFin.getDate()+1);
+            filtro = { $gte:objetoFiltro.fecha, $lte:diaFin};
+            
+      }else if(objetoFiltro.filtroForm === "semana"){
+            let semanaFin = new Date(objetoFiltro.fecha);
+            semanaFin.setDate(semanaFin.getDate() + 7);
+            filtro = { $gte:objetoFiltro.fecha, $lte:semanaFin}
+
+      }else if (objetoFiltro.filtroForm === "mes"){
+            let mesFin = new Date(objetoFiltro.fecha);
+            mesFin.setDate(mesFin.getDate()+30)
+            filtro = { $gte:objetoFiltro.fecha, $lte:mesFin}
+      }else{
+            return {mensaje:"Filtro Invalido",resultado:null}
+      }
+      let consulta = documentoCitas.find({
+            fecha:filtro
+      });
+
+      objetoRespuesta={
+            mensaje:consulta.acknowledged?"Correcta":"incorrecta",respuesta: consulta
+      }
+      return objetoRespuesta;
+      
 }
 
 //Ver historial de un paciente
@@ -239,19 +285,43 @@ async function verColeccion(coleccionNombre) {
       let coleccion = await documentoCitas.find().toArray();
       return coleccion;
 }
-//Eliminar Objeto de la coleccion
+//Eliminar Objeto de la coleccion 
 async function eliminar_de_coleccion(ObjetoId,coleccion) {
 
       await mongo_cliente.connect();
       let objetoRespuesta = {"operacionEstado":null,"mensaje":null}
       if (typeof ObjetoId === "string") {
-            ObjetoId = new ObjectId(ObjetoId);
+            if(ObjectId.isValid(ObjetoId)){
+                  ObjetoId = new ObjectId(ObjetoId)
+            }else{
+                return {"operacionEstado":false,"mensaje":"Id Invalido, No se pudo encontrar"}  
+            };
       } 
       let documentoEspecialistas = mongo_cliente.db("hospital").collection(coleccion);
+      
       let eliminado = documentoEspecialistas.deleteOne({
             "_id":ObjetoId
       });
+      //
       if ((await eliminado).acknowledged && (await eliminado).deletedCount) {
+      //Eliminamos las citas relacionadas con quien acabamos de eliminar
+            let citasEliminadas;
+            let coleccionCitas = mongo_cliente.db("hospital").collection("citas");
+            
+            //Definimos si buscamos una propiedad u otra para eliminar Segun de que coleccion estemos eliminando
+            if (coleccion==="especialistas") {
+
+                  citasEliminadas = await coleccionCitas.deleteMany({
+                        "especialistaID":ObjetoId
+                  });
+
+            }else if (coleccion==="pacientes"){
+
+                  citasEliminadas = await coleccionCitas.deleteMany({
+                        "pacienteID":ObjetoId
+                  });
+            }
+              
             objetoRespuesta = {"operacionEstado":true,"mensaje":"Encontrado y eliminado"}
       }else{
             objetoRespuesta = {"operacionEstado":false,"mensaje":"No se pudo encontrar"}
@@ -263,14 +333,14 @@ function fechaValida(fecha) {
   return fecha instanceof Date && isNaN(fecha)===false;
 }
 //@params Fecha inicial, Fecha Final, FiltroAsistieron
-async function filtrarRangosFechas(objetoFiltro) {
-      let otroDia =new Date (2025,4,8);
-      let hoy = new Date()
-      console.log(hoy> otroDia);
+//async function filtrarRangosFechas(objetoFiltro) {
+//      let otroDia =new Date (2025,4,8);
+//      let hoy = new Date()
+//      console.log(hoy> otroDia);
+//
+//      
+//}
 
-      
-}
-filtrarRangosFechas();
 
 //✅ 1. Cómo comprobar si una variable es de tipo fecha (Date)
 const fecha = new Date();
@@ -282,7 +352,5 @@ const fechaInvalida = new Date("2025-02-30");
 console.log(isNaN(fechaInvalida)); // true → ¡no es válida!
 console.log(fechaInvalida.toString()); // "Invalid Date"
 
-function esFechaValida(fecha) {
-  return fecha instanceof Date && !isNaN(fecha);
-}
+
 module.exports = app;
