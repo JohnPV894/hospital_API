@@ -48,13 +48,21 @@ app.get("/citas", async function (req, res ){
 app.post("/citas/crear", async function (req, res ){
       res.json(await crearCita(req.body))
 })
+app.post("/citas/editar", async function (req, res ){
+      res.json(await editarCita(req.body))
+})
 app.delete("/citas/eliminar", async function (req,res) {
       res.json(await eliminar_de_coleccion(req.body.id,"citas"))
+})
+app.post("/citas/buscarID", async function(req,res) {
+      res.json(await buscarCita(req.body))
 })
 app.post("/citas/filtrar/rango", async function(req,res) {
       res.json(await filtrarRangosFechas(req.body))
 })
-
+app.post("/citas/filtrar/fecha", async function (req, res) {
+      res.json(await filtrarFecha(req.body))
+})
 //Administrador opciones
 app.get("/especialistas", async function (req, res ){
       res.json(await verColeccion("especialistas"))
@@ -197,6 +205,50 @@ async function crearCita(datosCita) {
       }
       return objetoRespuesta;
 }
+//Buscar cita atraves con @param string id
+async function buscarCita(datos){
+      await mongo_cliente.connect();
+      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
+      let esString = typeof datos.cita_id === "string" ;
+      let id_valido = ObjectId.isValid(datos.cita_id);
+      let id;
+      if (esString && id_valido) {
+            id = new ObjectId(datos.cita_id);
+            let consulta = await documentoCitas.findOne({"_id":id});
+            if (consulta) {
+                  return {mensaje:"Resultado de busqueda",resultado:consulta};
+            }
+      }
+      return {mensaje:"Busqueda Invalida",resultado:null}
+}
+//identificar y editar cita con el id
+/**
+ * datos {cita_id:string, pacienteID:string, especialistaID:string, fecha:string, asistio:boolean}
+ * 
+ */ 
+async function editarCita(datos){
+      await mongo_cliente.connect();
+      let documentoCitas = mongo_cliente.db("hospital").collection("citas");
+      let esString = typeof datos.cita_id === "string" && typeof datos.pacienteID === "string" && typeof datos.especialistaID === "string"  ;
+      let id_valido = ObjectId.isValid(datos.cita_id) && ObjectId.isValid(datos.pacienteID) && ObjectId.isValid(datos.especialistaID);
+
+      if (esString && id_valido) {
+            datos.cita_id = new ObjectId(datos.cita_id);
+            datos.fecha=new Date(datos.fecha);
+            let consulta=await documentoCitas.updateOne({"_id":datos.cita_id},
+                  {$set:{
+                        pacienteID: new ObjectId(datos.pacienteID),
+                        especialistaID: new ObjectId(datos.especialistaID),
+                        fecha: datos.fecha,
+                        asistio: datos.asistio  
+                  }}
+            )
+            return{mensaje:"modificado"};
+      }else{
+            return {mensaje:"Id o datos invalidos"};
+      }
+      
+}
 //Filtrar rango de fechas
 //@params fechainicial, fechaFinal, filtroAsistencia
 async function filtrarRangosFechas(objetoFiltro) {
@@ -220,10 +272,10 @@ async function filtrarRangosFechas(objetoFiltro) {
                   fecha: {$gte: fechaInicio,$lte: fechaFinal}
             }).toArray();
       }
-      if (consulta!==null) {
-            return {mensaje:"Peticion aceptada por el servidor", respuesta: consulta}
+      if ( consulta.length>0 ) {
+            return { mensaje: "Peticion aceptada por el servidor", respuesta: consulta}
       }else{
-            return {mensaje:"Peticion rechazada por el servidor", respuesta: consulta}
+            return { mensaje: "Peticion rechazada", respuesta: null}
       }
 }
 //Filtrar Por Fecha (Mostrar todas las citas de un dia/semana/mes)
@@ -255,14 +307,15 @@ async function filtrarFecha(objetoFiltro) {
       }else{
             return {mensaje:"Filtro Invalido",resultado:null}
       }
-      let consulta = documentoCitas.find({
-            fecha:filtro
-      });
 
-      objetoRespuesta={
-            mensaje:consulta.acknowledged?"Correcta":"incorrecta",respuesta: consulta
+      let consulta =await documentoCitas.find({fecha:filtro}).toArray();
+
+      if ( consulta.length >0 ) {
+            return{mensaje:"Se hizo correctamente la consulta",respuesta: consulta}
+      }else{
+            return{mensaje:"Fallo la operacion",respuesta:null}
       }
-      return objetoRespuesta;
+
       
 }
 
