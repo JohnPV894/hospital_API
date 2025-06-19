@@ -39,7 +39,7 @@ app.delete("/pacientes/eliminar",async (req,res)=>{
       res.json(await eliminar_de_coleccion(req.body.id,"pacientes"))
 })
 app.post("/pacientes/informacionPaciente", async function (req, res ){
-      res.json(await verHistorialPaciente(req.body))
+      res.json(await verHistorialPaciente(req.body.idPaciente))
 })
 
 app.get("/citas", async function (req, res ){
@@ -115,22 +115,24 @@ async function crearSesion(objetoCredenciales) {
       await mongo_cliente.connect();
       let objetoRespuesta={"id":null,"operacion":null}
       let documentoSesiones = mongo_cliente.db("hospital").collection("sesiones");
+      let usuarioExiste = documentoSesiones.findOne({usuario:objetoCredenciales.usuario});
       if (objetoCredenciales.usuario.trim() === "" ||
-          objetoCredenciales.contraseña.trim() === "" ||
-          objetoCredenciales.correo.trim()=== ""
+          objetoCredenciales.contraseña.trim() === "" 
       ) {
-            objetoRespuesta={"id":false,"operacion":false,"mensaje":"faltan datos"}
-      }else{
-            let creacion = documentoSesiones.insertOne({
+            return {"id":false,"operacion":false,"mensaje":"faltan datos"};
+      }
+      
+      else if(usuarioExiste===null){
+            let creacion = await documentoSesiones.insertOne({
                   usuario:objetoCredenciales.usuario,
-                  contraseña:objetoCredenciales.usuario,
-                  correo:objetoCredenciales.correo,
+                  contraseña:objetoCredenciales.contraseña,
                   esAdmin:false
             });
-            (await creacion).acknowledged?objetoRespuesta={"id": creacion.insertedId,"operacion":true,"mensaje":"creado"}:
+            creacion.acknowledged?objetoRespuesta=
+            {"id": creacion.insertedId,"operacion":true,"mensaje":"creado"}:
             objetoRespuesta={"id": false,"operacion":true,"mensaje":"no creado"};
       }
-      return 
+      return objetoRespuesta
 }
 async function validarLogin(objetoCredenciales){
       console.log(objetoCredenciales);
@@ -281,34 +283,35 @@ async function filtrarRangosFechas(objetoFiltro) {
 //Filtrar Por Fecha (Mostrar todas las citas de un dia/semana/mes)
 //@params filtroForm, fecha,
 async function filtrarFecha(objetoFiltro) {
+      console.log(objetoFiltro);
+      
       await mongo_cliente.connect();
       let documentoCitas = mongo_cliente.db("hospital").collection("citas");
-      let objetoRespuesta={ mensaje :null, resultado :null};
-      let filtro;
+      let objetoRespuesta={ mensaje :null, respuesta :null};
 
-      if( fechaValida(objetoFiltro.fecha) === false){
-            return { mensaje:"Operacion Cancelada, Fecha invalida", resultado:null};
+      let fechaInicio= new Date(objetoFiltro.fecha)
+
+      if( fechaValida(fechaInicio) === false){
+            return { mensaje:"Operacion Cancelada, Fecha invalida", respuesta:null};
       }
 
-      if (objetoFiltro.filtroForm === "dia") {
-            let diaFin = new Date(objetoFiltro.fecha);
-            diaFin.setDate(diaFin.getDate()+1);
-            filtro = { $gte:objetoFiltro.fecha, $lte:diaFin};
-            
-      }else if(objetoFiltro.filtroForm === "semana"){
-            let semanaFin = new Date(objetoFiltro.fecha);
-            semanaFin.setDate(semanaFin.getDate() + 7);
-            filtro = { $gte:objetoFiltro.fecha, $lte:semanaFin}
-
-      }else if (objetoFiltro.filtroForm === "mes"){
-            let mesFin = new Date(objetoFiltro.fecha);
-            mesFin.setDate(mesFin.getDate()+30)
-            filtro = { $gte:objetoFiltro.fecha, $lte:mesFin}
-      }else{
-            return {mensaje:"Filtro Invalido",resultado:null}
+      let fechaFin;
+      if (objetoFiltro.filtroForm === "DIA") {
+            fechaFin = new Date(fechaInicio);
+            fechaFin.setDate(fechaFin.getDate() + 1);
+      } else if (objetoFiltro.filtroForm === "SEMANA") {
+            fechaFin = new Date(fechaInicio);
+            fechaFin.setDate(fechaFin.getDate() + 7);
+      } else if (objetoFiltro.filtroForm === "MES") {
+            fechaFin = new Date(fechaInicio);
+            fechaFin.setMonth(fechaFin.getMonth() + 1);
+      } else {
+            return { mensaje: "Filtro Invalido", respuesta: null };
       }
+      let filtro = { fecha: { $gte: fechaInicio, $lt: fechaFin } };
 
-      let consulta =await documentoCitas.find({fecha:filtro}).toArray();
+
+      let consulta =await documentoCitas.find(filtro).toArray();
 
       if ( consulta.length >0 ) {
             return{mensaje:"Se hizo correctamente la consulta",respuesta: consulta}
@@ -352,11 +355,11 @@ async function eliminar_de_coleccion(ObjetoId,coleccion) {
       } 
       let documentoEspecialistas = mongo_cliente.db("hospital").collection(coleccion);
       
-      let eliminado = documentoEspecialistas.deleteOne({
+      let eliminado =await documentoEspecialistas.deleteOne({
             "_id":ObjetoId
       });
       //
-      if ((await eliminado).acknowledged && (await eliminado).deletedCount) {
+      if ( eliminado.acknowledged &&  eliminado.deletedCount ) {
       //Eliminamos las citas relacionadas con quien acabamos de eliminar
             let citasEliminadas;
             let coleccionCitas = mongo_cliente.db("hospital").collection("citas");
@@ -385,25 +388,9 @@ async function eliminar_de_coleccion(ObjetoId,coleccion) {
 function fechaValida(fecha) {
   return fecha instanceof Date && isNaN(fecha)===false;
 }
-//@params Fecha inicial, Fecha Final, FiltroAsistieron
-//async function filtrarRangosFechas(objetoFiltro) {
-//      let otroDia =new Date (2025,4,8);
-//      let hoy = new Date()
-//      console.log(hoy> otroDia);
-//
-//      
-//}
 
 
-//✅ 1. Cómo comprobar si una variable es de tipo fecha (Date)
-const fecha = new Date();
-console.log(fecha instanceof Date); // true
 
-//✅ 2. Cuando creas una fecha con un valor incorrecto (por ejemplo, "2025-02-30"), JavaScript crea un objeto Date, pero su valor será inválido (Invalid Date):
-const fechaInvalida = new Date("2025-02-30");
-
-console.log(isNaN(fechaInvalida)); // true → ¡no es válida!
-console.log(fechaInvalida.toString()); // "Invalid Date"
 
 
 module.exports = app;
